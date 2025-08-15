@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CT Image Sliding Window Visualizer</title>
+    <link rel="stylesheet" href="./index.css" />
+    <script src="./index.js" defer></script>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🏥 CT Image Sliding Window Optimizer</h1>
+      <p class="subtitle">
+        Automatically optimizes window size to maximize coverage with
+        customizable slice interval
+      </p>
+
+      <div class="visualization-container">
+        <h3>Window Distribution</h3>
+        <div class="controls">
+          <div class="control-group">
+            <label for="totalImages">📊 Total Images in Series</label>
+            <input
+              type="range"
+              id="totalImages"
+              min="10"
+              max="600"
+              value="560" />
+            <div class="value-display" id="totalImagesValue">-</div>
+          </div>
+
+          <div class="control-group">
+            <label for="numWindows">🔢 Number of Windows</label>
+            <input type="range" id="numWindows" min="2" max="15" value="6" />
+            <div class="value-display" id="numWindowsValue">-</div>
+          </div>
+
+          <div class="control-group">
+            <label for="overlapPercent">🔄 Overlap Percentage</label>
+            <input
+              type="range"
+              id="overlapPercent"
+              min="0"
+              max="99"
+              value="67" />
+            <div class="value-display" id="overlapPercentValue">-</div>
+          </div>
+
+          <div class="control-group">
+            <label for="sliceInterval">📏 Slice Interval (cm)</label>
+            <input
+              type="number"
+              id="sliceInterval"
+              min="0.001"
+              max="10"
+              step="0.001"
+              value="0.08"
+              style="
+                width: 100%;
+                padding: 8px;
+                border: 2px solid #ddd;
+                border-radius: 6px;
+                font-size: 1em;
+              " />
+          </div>
+        </div>
+        <div class="windows-container" id="windowsContainer"></div>
+
+        <div class="center-points-container">
+          <h3>🎯 Window Center Points with Overlap Visualization</h3>
+          <div class="center-timeline" id="centerTimeline"></div>
+          <div id="centerDetails"></div>
+        </div>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Optimized Window Size</div>
+        <div class="stat-value-primary" id="windowSizeImagesInfo">-</div>
+        <div class="stat-value-secondary" id="windowSizeCmInfo">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Step Size</div>
+        <div class="stat-value-primary" id="stepSizeInfo">-</div>
+        <div class="stat-value-secondary" id="stepSizeCmInfo">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Series Length</div>
+        <div class="stat-value-primary" id="seriesLengthInfo">-</div>
+        <div class="stat-value-secondary" id="seriesLengthCmInfo">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Coverage Length</div>
+        <div class="stat-value-primary" id="coverageLengthInfo">-</div>
+        <div class="stat-value-secondary" id="coverageLengthCmInfo">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Series Coverage</div>
+        <div class="stat-value-primary" id="coverageInfo">-</div>
+        <div class="coverage-indicator">
+          <div class="coverage-fill" id="coverageFill"></div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Overlap Percentage</div>
+        <div class="stat-value-primary" id="overlapActualInfo">-</div>
+        <div class="stat-value-secondary" id="overlapSetInfo">-</div>
+      </div>
+    </div>
+  </body>
+</html>
