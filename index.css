@@ -1,10 +1,8 @@
 body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  /* max-width: 1400px; */
   margin: 0 0;
   padding: 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  /* min-height: 100vh; */
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -44,6 +42,124 @@ h1 {
   color: #7f8c8d;
   margin-bottom: 30px;
 }
+
+.target-input-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0px 32px;
+}
+
+.target-checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.checkbox-label {
+  font-size: 0.85em;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.target-checkbox-container input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.target-input-container input[type="number"] {
+  margin-bottom: 0;
+}
+select {
+  width: 100%;
+  padding: 3.5px 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: #2c3e50;
+  background: white
+    url("data:image/svg+xml;utf8,<svg fill='%23667eea' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>")
+    no-repeat right 10px center;
+  background-size: 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+input:hover,
+select:hover {
+  border-color: #667eea;
+  box-shadow: 0 0 6px rgba(102, 126, 234, 0.3);
+}
+
+input:focus,
+select:focus {
+  border-color: #764ba2;
+  box-shadow: 0 0 8px rgba(118, 75, 162, 0.4);
+  outline: none;
+}
+.target-input-container input[type="number"]:disabled {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+.optimization-mode {
+  margin-bottom: 20px;
+  padding: 20px;
+  background: linear-gradient(145deg, #e3f2fd, #bbdefb);
+  border-radius: 12px;
+  border: 2px solid #2196f3;
+  direction: ltr;
+}
+
+.mode-selector {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 15px;
+  background: white;
+  border-radius: 8px;
+  border: 2px solid #ddd;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.mode-option:hover {
+  border-color: #2196f3;
+  transform: translateY(-2px);
+}
+
+.mode-option.active {
+  border-color: #2196f3;
+  background: #e3f2fd;
+  font-weight: 600;
+}
+
+.mode-option input[type="radio"] {
+  margin: 0;
+}
+
+.mode-description {
+  text-align: center;
+  color: #555;
+  font-size: 0.9em;
+  margin-top: 10px;
+}
+
 .controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -85,6 +201,13 @@ input[type="range"]::-webkit-slider-thumb {
   border: 2px solid white;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
+input[type="number"] {
+  width: 100%;
+  padding: 8px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 1em;
+}
 .value-display {
   font-size: 0.9em;
   color: #495057;
@@ -125,6 +248,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .windows-container {
   margin-top: 40px;
+  direction: ltr;
 }
 .window-row {
   display: flex;
@@ -174,6 +298,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: #fff3e0;
   border-radius: 10px;
   border-left: 4px solid #ff9800;
+  direction: ltr;
 }
 .center-timeline {
   position: relative;
@@ -275,6 +400,19 @@ input[type="range"]::-webkit-slider-thumb {
   font-weight: 600;
   color: #6c757d;
 }
+.target-comparison {
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 5px;
+}
+.target-comparison.close {
+  color: #4caf50;
+  font-weight: 600;
+}
+.target-comparison.far {
+  color: #ff9800;
+  font-weight: 600;
+}
 .coverage-indicator {
   height: 8px;
   background: #e0e0e0;
@@ -306,4 +444,9 @@ input[type="range"]::-webkit-slider-thumb {
   height: 12px;
   border-radius: 3px;
   border: 1px solid #ccc;
+}
+
+.control-group.disabled {
+  opacity: 0.6;
+  pointer-events: none;
 }
