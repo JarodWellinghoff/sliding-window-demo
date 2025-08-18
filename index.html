@@ -3,23 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CT Image Sliding Window Visualizer</title>
+    <title>CT Image Sliding Window Optimizer</title>
     <link rel="stylesheet" href="index.css" />
+    <!-- fmin library for Nelder–Mead optimization -->
     <script src="https://cdn.jsdelivr.net/npm/fmin@0.0.4/build/fmin.min.js"></script>
   </head>
   <body>
-    <div class="container">
-      <h1>🏥 CT Image Sliding Window Optimizer</h1>
+    <!-- Header containing the app title and subtitle -->
+    <header class="header">
+      <h1>CT Image Sliding Window Optimizer</h1>
       <p class="subtitle">
         Advanced optimization with multiple modes for maximum coverage and
         target matching
       </p>
-
-      <div class="visualization-container">
+    </header>
+    <!-- Main container holds both the configuration panel and visualization area -->
+    <main class="main-container">
+      <!-- Configuration panel on the left -->
+      <section class="config-section">
         <h3>Configuration</h3>
-        <div class="controls">
+        <div class="form-grid">
+          <!-- Total images control -->
           <div class="control-group">
-            <label for="totalImages">📊 Total Images in Series</label>
+            <label for="totalImages">Total Images in Series</label>
             <input
               type="number"
               id="totalImages"
@@ -28,9 +34,9 @@
               step="1"
               value="560" />
           </div>
-
+          <!-- Total length control -->
           <div class="control-group">
-            <label for="totalLength">📏 Total Length of Series (cm)</label>
+            <label for="totalLength">Total Length of Series (cm)</label>
             <input
               type="number"
               id="totalLength"
@@ -39,9 +45,9 @@
               step="0.01"
               value="44.72" />
           </div>
-
-          <div class="control-group" id="targetWindowNumberGroup">
-            <label for="targetWindowNumber">🎯 Target Window Number</label>
+          <!-- Target window number and weight -->
+          <div class="control-group">
+            <label for="targetWindowNumber">Target Window Number</label>
             <div class="target-input-container">
               <input
                 type="number"
@@ -56,12 +62,14 @@
                 min="0"
                 max="1000"
                 step="0.01"
-                value="0.25" />
+                value="0.25"
+                placeholder="Weight"
+                title="Weight" />
             </div>
           </div>
-
-          <div class="control-group" id="targetWindowLengthGroup">
-            <label for="targetWindowLength">🎯 Target Window Length (cm)</label>
+          <!-- Target window length and weight -->
+          <div class="control-group">
+            <label for="targetWindowLength">Target Window Length (cm)</label>
             <div class="target-input-container">
               <input
                 type="number"
@@ -76,16 +84,20 @@
                 min="0"
                 max="1"
                 step="0.01"
-                value="0.25" />
+                value="0.25"
+                placeholder="Weight"
+                title="Weight" />
             </div>
           </div>
-
-          <div class="control-group" id="targetStepGroup">
+          <!-- Step size / overlap selector and values -->
+          <div class="control-group">
+            <label for="targetType">Step Size or Overlap</label>
             <select id="targetType">
-              <option value="stepSize">🎯 Step Size (cm)</option>
-              <option value="overlap">🎯 Overlap (%)</option>
+              <option value="stepSize">Step Size (cm)</option>
+              <option value="overlap">Overlap (%)</option>
             </select>
-            <div class="target-input-container">
+            <!-- Step size / overlap value and weight -->
+            <div class="target-input-container" style="margin-top: 8px">
               <input
                 type="number"
                 id="targetStepOrOverlap"
@@ -99,14 +111,14 @@
                 min="0"
                 max="1"
                 step="0.01"
-                value="0.25" />
+                value="0.25"
+                placeholder="Weight"
+                title="Weight" />
             </div>
           </div>
-
-          <div class="control-group" id="targetPercentageGroup">
-            <label for="targetPercentage"
-              >🎯 Target Overlap Percentage (%)</label
-            >
+          <!-- Target overlap percentage and weight -->
+          <div class="control-group">
+            <label for="targetPercentage">Target Overlap Percentage (%)</label>
             <div class="target-input-container">
               <input
                 type="number"
@@ -121,59 +133,66 @@
                 min="0"
                 max="1"
                 step="0.01"
-                value="0.50" />
+                value="0.50"
+                placeholder="Weight"
+                title="Weight" />
             </div>
           </div>
         </div>
-      </div>
-      <div style="direction: ltr">
+      </section>
+      <!-- Visualization and results area on the right -->
+      <section class="visualization-section">
         <h3>Output</h3>
         <div class="windows-container" id="windowsContainer"></div>
-      </div>
-
-      <div class="center-points-container">
-        <h3>🎯 Window Center Points with Overlap Visualization</h3>
+        <!-- <h3 style="margin-top: 30px">
+          Window Center Points with Overlap Visualization
+        </h3>
         <div class="center-timeline" id="centerTimeline"></div>
-        <div id="centerDetails"></div>
-      </div>
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Optimized Window Size</div>
-        <div class="stat-value-primary" id="windowSizeImagesInfo">-</div>
-        <div class="stat-value-secondary" id="windowSizeCmInfo">-</div>
-        <div class="target-comparison" id="windowSizeComparison"></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Step Size</div>
-        <div class="stat-value-primary" id="stepSizeInfo">-</div>
-        <div class="stat-value-secondary" id="stepSizeCmInfo">-</div>
-        <div class="target-comparison" id="stepSizeComparison"></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Overlap</div>
-        <div class="stat-value-primary" id="overlapActualInfo">-</div>
-        <div class="stat-value-secondary" id="overlapSetInfo">-</div>
-        <div class="target-comparison" id="overlapComparison"></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Series Length</div>
-        <div class="stat-value-primary" id="seriesLengthInfo">-</div>
-        <div class="stat-value-secondary" id="seriesLengthCmInfo">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Coverage Length</div>
-        <div class="stat-value-primary" id="coverageLengthInfo">-</div>
-        <div class="stat-value-secondary" id="coverageLengthCmInfo">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Series Coverage</div>
-        <div class="stat-value-primary" id="coverageInfo">-</div>
-        <div class="coverage-indicator">
-          <div class="coverage-fill" id="coverageFill"></div>
+        <div id="centerDetails"></div> -->
+      </section>
+      <section class="summary-section">
+        <h3>Summary</h3>
+        <!-- Stats cards for summary metrics -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Optimized Window Size</div>
+            <div class="stat-value-primary" id="windowSizeImagesInfo">-</div>
+            <div class="stat-value-secondary" id="windowSizeCmInfo">-</div>
+            <div class="target-comparison" id="windowSizeComparison"></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Step Size</div>
+            <div class="stat-value-primary" id="stepSizeInfo">-</div>
+            <div class="stat-value-secondary" id="stepSizeCmInfo">-</div>
+            <div class="target-comparison" id="stepSizeComparison"></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Overlap</div>
+            <div class="stat-value-primary" id="overlapActualInfo">-</div>
+            <div class="stat-value-secondary" id="overlapSetInfo">-</div>
+            <div class="target-comparison" id="overlapComparison"></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Series Length</div>
+            <div class="stat-value-primary" id="seriesLengthInfo">-</div>
+            <div class="stat-value-secondary" id="seriesLengthCmInfo">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Coverage Length</div>
+            <div class="stat-value-primary" id="coverageLengthInfo">-</div>
+            <div class="stat-value-secondary" id="coverageLengthCmInfo">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Series Coverage</div>
+            <div class="stat-value-primary" id="coverageInfo">-</div>
+            <div class="coverage-indicator">
+              <div class="coverage-fill" id="coverageFill"></div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
+    <!-- Application script -->
     <script src="index.js"></script>
   </body>
 </html>
