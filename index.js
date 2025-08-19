@@ -295,7 +295,7 @@ function updateVisualization() {
   const seriesLength = totalImages;
   const seriesLengthCm = totalImages * sliceInterval;
   const coverageLength = lastWindow.end - firstWindow.start + 1;
-  const coverageLengthCm = coverageLength * sliceInterval; // FIXED
+  const coverageLengthCm = coverageLength * sliceInterval;
   const coverage = (coverageLength / seriesLength) * 100;
 
   let actualOverlap = 0;
@@ -306,6 +306,7 @@ function updateVisualization() {
   }
   actualOverlap = windows.length > 1 ? actualOverlap / (windows.length - 1) : 0;
   const actualOverlapCm = actualOverlap * sliceInterval;
+
   // Update stats
   document.getElementById(
     "windowSizeImagesInfo"
@@ -336,19 +337,11 @@ function updateVisualization() {
   ).textContent = `${coverageLengthCm.toFixed(2)} cm`;
   document.getElementById(
     "overlapActualInfo"
-  ).textContent = `${actualOverlap} images`;
+  ).textContent = `${actualOverlap.toFixed(1)} images`;
   document.getElementById("coverageFill").style.width = `${coverage}%`;
   document.getElementById(
     "overlapSetInfo"
-  ).innerHTML = `${actualOverlapCm.toFixed(1)} cm<br>`;
-
-  // Update target comparisons and show optimization details
-  if (!optimizationResult) {
-    document.getElementById("windowSizeComparison").textContent =
-      "Optimization failed";
-    document.getElementById("stepSizeComparison").textContent =
-      "Using fallback values";
-  }
+  ).innerHTML = `${actualOverlapCm.toFixed(1)} cm`;
 
   // Create windows visualization
   const windowsContainer = document.getElementById("windowsContainer");
@@ -356,29 +349,39 @@ function updateVisualization() {
 
   windows.forEach((w, i) => {
     const row = document.createElement("div");
-    row.className = "window-row";
-
     const hue = ((i * 360) / windows.length) % 360;
     const color = `hsl(${hue}, 70%, 55%)`;
+    const left = (w.start / totalImages) * 100;
+    const width = ((w.end - w.start + 1) / totalImages) * 100;
 
+    row.className = "card white z-depth-1";
+    row.style.padding = "0.75rem";
+    row.style.marginBottom = "0.5rem";
     row.innerHTML = `
-      <div class="window-label">Window ${i + 1}</div>
-      <div class="window-timeline">
-        <div class="window-bar" style="
-          left: ${(w.start / totalImages) * 100}%;
-          width: ${((w.end - w.start + 1) / totalImages) * 100}%;
-          background: ${color};
-        ">
-          ${w.start + 1}-${w.end + 1}
-        </div>
-      </div>
-      <div class="window-info">
-        Images: ${w.start + 1} to ${w.end + 1}<br>
-        Center: ${w.centercm.toFixed(2)} cm
-      </div>
-    `;
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <div class="window-timeline" style="flex: 1;">
+                <div class="window-bar" style="
+                  left: ${left}%;
+                  width: ${width}%;
+                  background: ${color};
+                ">${width > 8 ? `W${i + 1}` : ""}
+                </div>
+              </div>
+              <div class="window-info" style="min-width: 140px; text-align: right;">
+                <div style="font-weight: 500;">Images: ${w.start + 1} to ${
+      w.end + 1
+    }</div>
+                <div style="color: #666; font-size: 0.8rem;">Center: ${w.centercm.toFixed(
+                  2
+                )} cm</div>
+              </div>
+            </div>
+          `;
     windowsContainer.appendChild(row);
   });
+
+  // Show center timeline section
+  document.getElementById("centerTimelineSection").style.display = "block";
 
   // Enhanced center timeline
   const centerTimeline = document.getElementById("centerTimeline");
@@ -457,28 +460,41 @@ function updateVisualization() {
   // Optimization info
   let optimizationInfo = "";
   if (!optimizationResult) {
-    optimizationInfo = `<br><strong>Nelder-Mead:</strong> <span style="color: #ff9800;">No optimization result available</span>`;
+    optimizationInfo = `<p><strong>Nelder-Mead:</strong> <span class="orange-text">No optimization result available</span></p>`;
   } else if (optimizationResult.error) {
-    optimizationInfo = `<br><strong>Nelder-Mead:</strong> <span style="color: #ff9800;">${optimizationResult.error}</span>`;
+    optimizationInfo = `<p><strong>Nelder-Mead:</strong> <span class="orange-text">${optimizationResult.error}</span></p>`;
   } else {
-    optimizationInfo = `<br><strong>Nelder-Mead:</strong> Score ${optimizationResult.optimizationScore.toFixed(
+    const statusIcon = optimizationResult.converged ? "✓" : "⚠";
+    const statusColor = optimizationResult.converged
+      ? "green-text"
+      : "orange-text";
+    optimizationInfo = `<p><strong>Nelder-Mead:</strong> Score ${optimizationResult.optimizationScore.toFixed(
       4
-    )}, ${optimizationResult.converged ? "✓" : "⚠"}`;
+    )} <span class="${statusColor}">${statusIcon}</span></p>`;
   }
 
   document.getElementById("centerDetails").innerHTML = `
-    <p><strong>Center Points:</strong> ${centerPoints
-      .map((p) => p.toFixed(2) + "cm")
-      .join(", ")}</p>
-    <p><strong>Average Distance:</strong> ${
-      windows.length > 1
-        ? (
-            (windows[windows.length - 1].centercm - windows[0].centercm) /
-            (windows.length - 1)
-          ).toFixed(2) + " cm"
-        : "N/A"
-    }${optimizationInfo}</p>
-  `;
+          <h6 class="blue-text text-darken-2"><i class="material-icons left small">info</i>Details</h6>
+          <p><strong>Center Points:</strong> 
+            ${centerPoints
+              .map(
+                (p, i) =>
+                  `<span class="chip" style="background: hsla(${
+                    (i * 360) / centerPoints.length
+                  }, 70%, 85%)">${p.toFixed(2)}cm</span>`
+              )
+              .join("")}
+          </p>
+          <p><strong>Average Distance:</strong> ${
+            windows.length > 1
+              ? (
+                  (windows[windows.length - 1].centercm - windows[0].centercm) /
+                  (windows.length - 1)
+                ).toFixed(2) + " cm"
+              : "N/A"
+          }</p>
+          ${optimizationInfo}
+        `;
 }
 
 // Event listeners
@@ -543,8 +559,12 @@ document.getElementById("targetType").addEventListener("change", (e) => {
   updateVisualization();
 });
 
-// Initialize
-function initializeApplication() {
+// Initialize MaterializeCSS components
+document.addEventListener("DOMContentLoaded", function () {
+  // Initialize select elements
+  var elems = document.querySelectorAll("select");
+  var instances = M.FormSelect.init(elems);
+
+  // Initialize application
   updateVisualization();
-}
-initializeApplication();
+});
