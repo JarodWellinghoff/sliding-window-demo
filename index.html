@@ -62,7 +62,7 @@
                 min="0"
                 max="1000"
                 step="0.01"
-                value="0.25"
+                value="0.00"
                 placeholder="Weight"
                 title="Weight" />
             </div>
@@ -144,11 +144,14 @@
       <section class="visualization-section">
         <h3>Output</h3>
         <div class="windows-container" id="windowsContainer"></div>
-        <!-- <h3 style="margin-top: 30px">
+        <h3 style="margin-top: 30px; display: none">
           Window Center Points with Overlap Visualization
         </h3>
-        <div class="center-timeline" id="centerTimeline"></div>
-        <div id="centerDetails"></div> -->
+        <div
+          class="center-timeline"
+          id="centerTimeline"
+          style="display: none"></div>
+        <div id="centerDetails" style="display: none"></div>
       </section>
       <section class="summary-section">
         <h3>Summary</h3>
