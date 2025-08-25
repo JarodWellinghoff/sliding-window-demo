@@ -71,15 +71,30 @@
                   value="44.72" />
               </div>
 
-              <!-- Slice Thickness -->
+              <!-- Target Window Number -->
               <div class="bordered-box">
-                <h6 class="box-title">Slice Thickness (cm)</h6>
-                <input
-                  id="sliceThickness"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value="0.1" />
+                <h6 class="box-title">Window Number</h6>
+                <div class="target-input-row">
+                  <div class="input-field">
+                    <input
+                      id="targetWindowNumber"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value="7" />
+                    <label for="targetWindowNumber">Target</label>
+                  </div>
+                  <div class="input-field weight-input">
+                    <input
+                      id="targetWindowNumberWeight"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value="0.00"
+                      placeholder="Weight" />
+                    <label for="targetWindowNumberWeight">Weight</label>
+                  </div>
+                </div>
               </div>
 
               <!-- Target Window Length -->
@@ -110,26 +125,32 @@
 
               <!-- Step Size / Overlap Value -->
               <div class="bordered-box">
-                <h6 class="box-title">Step Size (cm)</h6>
+                <!-- Step Size or Overlap Type -->
+                <div class="box-title" style="top: -2rem">
+                  <select id="targetType">
+                    <option value="stepSize">Step Size (cm)</option>
+                    <option value="overlap">Overlap (%)</option>
+                  </select>
+                </div>
                 <div class="target-input-row">
                   <div class="input-field">
                     <input
-                      id="targetStepSize"
+                      id="targetStepOrOverlap"
                       type="number"
                       min="0.1"
                       step="0.1"
                       value="5.0" />
-                    <label for="targetStepSize">Target</label>
+                    <label for="targetStepOrOverlap">Target</label>
                   </div>
                   <div class="input-field weight-input">
                     <input
-                      id="targetStepSizeWeight"
+                      id="targetStepOrOverlapWeight"
                       type="number"
                       min="0"
                       step="0.01"
                       value="0.25"
                       placeholder="Weight" />
-                    <label for="targetStepSizeWeight">Weight</label>
+                    <label for="targetStepOrOverlapWeight">Weight</label>
                   </div>
                 </div>
               </div>

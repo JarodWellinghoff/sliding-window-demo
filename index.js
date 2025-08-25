@@ -1,4 +1,14 @@
-let mode = "stepSize";
+function getSlicePositions(totalImages, totalLength, sliceThickness) {
+  const spaceBetweenSlices = totalLength / (totalImages - 1);
+  const positions = {};
+  for (let i = totalImages; i > 0; i--) {
+    positions[i] = {
+      rel_center_mm: (totalImages - i) * spaceBetweenSlices,
+      thickness_mm: sliceThickness,
+    };
+  }
+  return positions;
+}
 
 function optimizeWindowSize(totalImages, numWindows, overlapPercent) {
   let bestWindowSize = 1;
@@ -27,12 +37,7 @@ function optimizeWindowSize(totalImages, numWindows, overlapPercent) {
 // Nelder-Mead optimization function for target matching
 function optimizeWithNelderMead(totalImages, targets, sliceInterval, weights) {
   // --- normalize weights to sum=1 (keeping zeros) ---
-  const keys = [
-    "window_length",
-    "window_number",
-    "step_or_overlap",
-    "percentage",
-  ];
+  const keys = ["window_coverage", "window_number", "step_size", "percentage"];
   let wsum = 0;
   for (const k of keys) wsum += weights[k] || 0;
   if (wsum === 0) {
@@ -43,15 +48,12 @@ function optimizeWithNelderMead(totalImages, targets, sliceInterval, weights) {
 
   // Reasonable scales for relative error (prevents one unit dominating)
   const scale = {
-    window_length: Math.max(
-      targets.window_length || 5 * sliceInterval,
+    window_coverage: Math.max(
+      targets.window_coverage || 5 * sliceInterval,
       sliceInterval
     ),
     window_number: Math.max(targets.window_number || 4, 2),
-    step_or_overlap: Math.max(
-      targets.step_or_overlap || 2 * sliceInterval,
-      sliceInterval
-    ),
+    step_size: Math.max(targets.step_size || 2 * sliceInterval, sliceInterval),
     percentage: Math.max(targets.percentage || 80, 1),
   };
 
@@ -87,9 +89,9 @@ function optimizeWithNelderMead(totalImages, targets, sliceInterval, weights) {
 
     // errors (scaled, mostly relative)
     const v = {
-      window_length: windowCm,
+      window_coverage: windowCm,
       window_number: numWindows,
-      step_or_overlap: stepCm,
+      step_size: stepCm,
       percentage: coveragePct,
     };
 
@@ -110,9 +112,9 @@ function optimizeWithNelderMead(totalImages, targets, sliceInterval, weights) {
 
   // --- initial guesses (seeded + random) ---
   const seed = [
-    targets.window_length,
+    targets.window_coverage,
     targets.window_number,
-    targets.step_or_overlap,
+    targets.step_size,
     targets.percentage,
   ];
 
@@ -168,7 +170,7 @@ function optimizeWithNelderMead(totalImages, targets, sliceInterval, weights) {
 
   return {
     windowSize: windowImages,
-    stepOrOverlap: stepImages,
+    stepSize: stepImages,
     numWindows,
     coverage,
     windowCm,
@@ -178,111 +180,354 @@ function optimizeWithNelderMead(totalImages, targets, sliceInterval, weights) {
   };
 }
 
+function coverage_mm(start, end = null) {
+  if (end === null) return start["thickness_mm"];
+  const distance = distance_mm(start, end);
+  const thickness = thickness_mm(start, end);
+  return distance + thickness;
+}
+
+function distance_mm(start, end = null) {
+  if (end === null) return 0;
+  const start_pos = start["rel_center_mm"];
+  const end_pos = end["rel_center_mm"];
+  return Math.abs(end_pos - start_pos);
+}
+
+function thickness_mm(start, end = null) {
+  if (end === null) return start["thickness_mm"];
+  return (start["thickness_mm"] + end["thickness_mm"]) / 2;
+}
+
+function get_future_positions(positions, start_index) {
+  const future_positions_mm = {};
+  for (const [key, pos] of Object.entries(positions)) {
+    if (key > start_index) {
+      future_positions_mm[key] = pos;
+    }
+  }
+  return future_positions_mm;
+}
+
+function get_asdf(positions, start_index, target_mm) {
+  const future_positions_mm = get_future_positions(positions, start_index);
+  const coverages_mm = {};
+  for (const [key, pos] of Object.entries(future_positions_mm)) {
+    coverages_mm[key] = coverage_mm(positions[start_index], pos);
+  }
+  const errors = {};
+  for (const [key, c] of Object.entries(coverages_mm)) {
+    errors[key] = (Math.abs(c - target_mm) / target_mm) * 100;
+  }
+  const min_error_key = parseInt(
+    Object.entries(errors).reduce((min, curr) =>
+      curr[1] < min[1] ? curr : min
+    )[0]
+  );
+  const min_error = errors[min_error_key];
+  const min_error_coverage = coverages_mm[min_error_key];
+  return [min_error_key, min_error, min_error_coverage];
+}
+
+function get_asdf1(positions, start_index, target_mm) {
+  const future_positions_mm = get_future_positions(positions, start_index);
+  const distances_mm = {};
+  for (const [key, pos] of Object.entries(future_positions_mm)) {
+    distances_mm[key] = distance_mm(positions[start_index], pos);
+  }
+  const errors = {};
+  for (const [key, c] of Object.entries(distances_mm)) {
+    errors[key] = (Math.abs(c - target_mm) / target_mm) * 100;
+  }
+  const min_error_key = parseInt(
+    Object.entries(errors).reduce((min, curr) =>
+      curr[1] < min[1] ? curr : min
+    )[0]
+  );
+  const min_error = errors[min_error_key];
+  const min_error_distance = distances_mm[min_error_key];
+  return [min_error_key, min_error, min_error_distance];
+}
+
 function calculateWindows() {
   const totalImages = parseInt(
     document.getElementById("totalImages").value,
     10
   );
-  const totalLength = parseFloat(document.getElementById("totalLength").value);
-  const sliceInterval = totalLength / totalImages;
+  const totalLength =
+    parseFloat(document.getElementById("totalLength").value) * 10;
+  const sliceThickness =
+    parseFloat(document.getElementById("sliceThickness").value) * 10;
 
   let windowSize,
-    stepOrOverlap,
+    stepSize,
     numWindows,
     optimizationResult = null;
 
   // Targets (in cm / units as labeled)
-  const targetWindowCm = parseFloat(
-    document.getElementById("targetWindowLength").value
-  );
-  const rawStepOrOverlap = parseFloat(
-    document.getElementById("targetStepOrOverlap").value
-  );
-  const targetPercentage = parseFloat(
-    document.getElementById("targetPercentage").value
-  );
-  const targetWindowNumber = parseFloat(
-    document.getElementById("targetWindowNumber").value
+
+  const slicePositions = getSlicePositions(
+    totalImages,
+    totalLength,
+    sliceThickness
   );
 
-  const targetStepCm =
-    mode === "overlap"
-      ? targetWindowCm * (1 - rawStepOrOverlap / 100) // % → cm
-      : rawStepOrOverlap;
+  const smallestKey = Math.min(...Object.keys(slicePositions));
+  const largestKey = Math.max(...Object.keys(slicePositions));
+
   const targets = {
-    window_length: targetWindowCm,
-    window_number: targetWindowNumber,
-    step_or_overlap: targetStepCm,
-    percentage: targetPercentage,
+    window_coverage:
+      parseFloat(document.getElementById("targetWindowLength").value) * 10,
+    step_size: parseFloat(document.getElementById("targetStepSize").value) * 10,
+    total_coverage:
+      (parseFloat(document.getElementById("targetPercentage").value) / 100) *
+      coverage_mm(slicePositions[smallestKey], slicePositions[largestKey]),
   };
 
-  const weights = {
-    window_length: parseFloat(
+  const raw_weights = {
+    window_coverage: parseFloat(
       document.getElementById("targetWindowLengthWeight").value
     ),
-    window_number: parseFloat(
-      document.getElementById("targetWindowNumberWeight").value
+    step_size: parseFloat(
+      document.getElementById("targetStepSizeWeight").value
     ),
-    step_or_overlap: parseFloat(
-      document.getElementById("targetStepOrOverlapWeight").value
-    ),
-    percentage: parseFloat(
+    total_coverage: parseFloat(
       document.getElementById("targetPercentageWeight").value
     ),
   };
-
-  // Nelder-Mead target optimization
-  optimizationResult = optimizeWithNelderMead(
-    totalImages,
-    targets,
-    sliceInterval,
-    { ...weights }
+  let weights;
+  const totalWeight = Object.values(raw_weights).reduce(
+    (acc, val) => acc + val,
+    0
   );
 
-  windowSize = optimizationResult.windowSize;
-  stepOrOverlap = optimizationResult.stepOrOverlap;
-  numWindows = optimizationResult.numWindows;
+  if (totalWeight === 0) {
+    const weight_count = Object.keys(raw_weights).length;
+    weights = {};
+    for (const [key, val] of Object.entries(raw_weights)) {
+      weights[key] = 1 / weight_count;
+    }
+  } else {
+    weights = {};
+    for (const [key, val] of Object.entries(raw_weights)) {
+      weights[key] = val / totalWeight;
+    }
+  }
+  const pt = [targets["window_coverage"], targets["step_size"]];
 
-  const windows = [];
-  const centerPoints = [];
-
-  for (let i = 0; i < numWindows; i++) {
-    const start = i * stepOrOverlap;
-    const end = Math.min(start + windowSize - 1, totalImages - 1);
-
-    if (start >= totalImages) break;
-
-    const centerIndex =
-      start + (Math.min(windowSize, totalImages - start) - 1) / 2;
-    const centercm = centerIndex * sliceInterval;
-
-    windows.push({ start, end, center: centerIndex, centercm });
-    centerPoints.push(centercm);
+  function get_windows(x) {
+    let window_start_img = smallestKey;
+    let [window_end_img, e1, c] = get_asdf(
+      slicePositions,
+      window_start_img,
+      x[0]
+    );
+    let [next_window_start_img, e2, d] = get_asdf1(
+      slicePositions,
+      window_start_img,
+      x[1]
+    );
+    let center_idx = Math.floor((window_start_img + window_end_img) / 2);
+    const windows = [
+      {
+        window: {
+          start_img: window_start_img,
+          start_idx: window_start_img - 1,
+          start_mm: slicePositions[window_start_img].rel_center_mm,
+          end_img: window_end_img,
+          end_idx: window_end_img - 1,
+          end_mm: slicePositions[window_end_img].rel_center_mm,
+          error: e1,
+          coverage_mm: c,
+          coverage_imgs: window_end_img - window_start_img + 1,
+          center_idx: center_idx,
+          center_mm: slicePositions[center_idx].rel_center_mm,
+        },
+        step: {
+          img: next_window_start_img,
+          idx: next_window_start_img - 1,
+          mm: slicePositions[next_window_start_img].rel_start_mm,
+          error: e2,
+          distance_mm: d,
+          distance_imgs: next_window_start_img - window_start_img + 1,
+        },
+      },
+    ];
+    while (true) {
+      window_start_img = next_window_start_img;
+      [window_end_img, e1, c] = get_asdf(
+        slicePositions,
+        window_start_img,
+        x[0]
+      );
+      if (e1 > 1) {
+        break;
+      }
+      [next_window_start_img, e2] = get_asdf1(
+        slicePositions,
+        window_start_img,
+        x[1]
+      );
+      center_idx = Math.floor((window_start_img + window_end_img) / 2);
+      const window = {
+        window: {
+          start_img: window_start_img,
+          start_idx: window_start_img - 1,
+          start_mm: slicePositions[window_start_img].rel_center_mm,
+          end_img: window_end_img,
+          end_idx: window_end_img - 1,
+          end_mm: slicePositions[window_end_img].rel_center_mm,
+          error: e1,
+          coverage_mm: c,
+          coverage_imgs: window_end_img - window_start_img + 1,
+          center_idx: center_idx,
+          center_mm: slicePositions[center_idx].rel_center_mm,
+        },
+        step: {
+          img: next_window_start_img,
+          idx: next_window_start_img - 1,
+          mm: slicePositions[next_window_start_img].rel_start_mm,
+          error: e2,
+          distance_mm: d,
+          distance_imgs: next_window_start_img - window_start_img + 1,
+        },
+      };
+      windows.push(window);
+    }
+    return windows;
   }
 
-  return {
-    windows,
-    centerPoints,
-    stepOrOverlap,
-    totalImages,
-    windowSize,
-    sliceInterval,
-    actualNumWindows: windows.length,
-    optimizationResult,
-  };
+  function get_stats(windows) {
+    const first_window = windows[0];
+    const last_window = windows[windows.length - 1];
+    const coverage = coverage_mm(
+      slicePositions[first_window["window"]["start_img"]],
+      slicePositions[last_window["window"]["end_img"]]
+    );
+    const window_coverage =
+      windows.reduce(
+        (acc, window) => acc + window["window"]["coverage_mm"],
+        0
+      ) / windows.length;
+    const step_size =
+      windows.reduce((acc, window) => acc + window["step"]["distance_mm"], 0) /
+      windows.length;
+    return {
+      total_coverage: coverage,
+      window_coverage: window_coverage,
+      step_size: step_size,
+    };
+  }
+
+  function get_error(stats, key) {
+    return (Math.abs(stats[key] - targets[key]) / targets[key]) * 100;
+  }
+
+  function get_errors(stats) {
+    return {
+      total_coverage: get_error(stats, "total_coverage"),
+      window_coverage: get_error(stats, "window_coverage"),
+      step_size: get_error(stats, "step_size"),
+    };
+  }
+
+  function get_cost(errors, key) {
+    return weights[key] * errors[key];
+  }
+
+  function get_cost_sum(errors) {
+    return Object.keys(errors).reduce(
+      (acc, key) => acc + get_cost(errors, key),
+      0
+    );
+  }
+
+  function get_costs(errors) {
+    const c = {
+      total_coverage: get_cost(errors, "total_coverage"),
+      window_coverage: get_cost(errors, "window_coverage"),
+      step_size: get_cost(errors, "step_size"),
+    };
+    c["sum"] = get_cost_sum(errors);
+    return c;
+  }
+
+  function get_results(x) {
+    const _windows = get_windows(x);
+    const stats = get_stats(_windows);
+    const errors = get_errors(stats);
+    const cost = get_costs(errors);
+    return {
+      windows: _windows,
+      stats,
+      errors,
+      cost,
+    };
+  }
+
+  function objective(x) {
+    const results = get_results(x);
+    return results["cost"]["sum"];
+  }
+
+  const result = fmin.nelderMead(objective, pt);
+  const results = get_results(result.x);
+  results["targets"] = targets;
+  results["weights"] = weights;
+  results["targets"]["totalImages"] = totalImages;
+
+  // Nelder-Mead target optimization
+  //   optimizationResult = optimizeWithNelderMead(
+  //     totalImages,
+  //     targets,
+  //     sliceInterval,
+  //     { ...weights }
+  //   );
+
+  //   const windows = results.windows;
+  //   const centerPoints = [];
+  //   windowSize = optimizationResult.windowSize;
+  //   stepSize = optimizationResult.stepSize;
+  //   numWindows = optimizationResult.numWindows;
+
+  //   for (let i = 0; i < numWindows; i++) {
+  //     const start = i * stepSize;
+  //     const end = Math.min(start + windowSize - 1, totalImages - 1);
+
+  //     if (start >= totalImages) break;
+
+  //     const centerIndex =
+  //       start + (Math.min(windowSize, totalImages - start) - 1) / 2;
+  //     const centercm = centerIndex * sliceInterval;
+
+  //     _windows.push({ start, end, center: centerIndex, centercm });
+  //     centerPoints.push(centercm);
+  //   }
+  return results;
+  //   return {
+  //     windows: _windows,
+  //     centerPoints,
+  //     stepSize,
+  //     totalImages,
+  //     windowSize,
+  //     sliceInterval,
+  //     actualNumWindows: _windows.length,
+  //     optimizationResult,
+  //   };
 }
 
 function updateVisualization() {
   const data = calculateWindows();
-  const {
-    windows,
-    centerPoints,
-    stepOrOverlap,
-    totalImages,
-    windowSize,
-    sliceInterval,
-    optimizationResult,
-  } = data;
+  const { cost, errors, stats, targets, weights, windows } = data;
+  //   const {
+  //     windows,
+  //     centerPoints,
+  //     stepSize,
+  //     totalImages,
+  //     windowSize,
+  //     sliceInterval,
+  //     optimizationResult,
+  //   } = data;
 
   console.debug("Visualization Data:", data);
   if (!windows.length) return;
@@ -290,22 +535,37 @@ function updateVisualization() {
   // Calculate stats
   const lastWindow = windows[windows.length - 1];
   const firstWindow = windows[0];
-  const windowSizeCm = windowSize * sliceInterval;
-  const stepOrOverlapCm = stepOrOverlap * sliceInterval;
-  const seriesLength = totalImages;
-  const seriesLengthCm = totalImages * sliceInterval;
-  const coverageLength = lastWindow.end - firstWindow.start + 1;
-  const coverageLengthCm = coverageLength * sliceInterval;
+  const windowSizeCm = stats.window_coverage / 10;
+  const stepSizeCm = stats.step_size / 10;
+  const seriesLength = targets.totalImages;
+  const seriesLengthCm = targets.total_coverage / 10;
+  const coverageLength =
+    lastWindow.window.end_img - firstWindow.window.start_img + 1;
+  const coverageLengthCm = stats.total_coverage / 10;
   const coverage = (coverageLength / seriesLength) * 100;
 
   let actualOverlap = 0;
+  let actualOverlapCm = 0;
+  let windowSize = 0;
+  let stepSize = 0;
   for (let i = 0; i < windows.length - 1; i++) {
-    const currentEnd = windows[i].end;
-    const nextStart = windows[i + 1].start;
-    actualOverlap += currentEnd + 1 - nextStart;
+    const currentEndImg = windows[i].window.end_img;
+    const currentEndCm = windows[i].window.end_mm / 10;
+    const currentStartImg = windows[i].window.start_img;
+    const nextStartImg = windows[i + 1].window.start_img;
+    const nextStartCm = windows[i + 1].window.start_mm / 10;
+    const currentStepSize = windows[i].step.distance_imgs;
+
+    actualOverlap += currentEndImg - nextStartImg;
+    actualOverlapCm += currentEndCm - nextStartCm;
+    windowSize += currentEndImg - currentStartImg;
+    stepSize += currentStepSize;
   }
   actualOverlap = windows.length > 1 ? actualOverlap / (windows.length - 1) : 0;
-  const actualOverlapCm = actualOverlap * sliceInterval;
+  actualOverlapCm =
+    windows.length > 1 ? actualOverlapCm / (windows.length - 1) : 0;
+  windowSize = windows.length > 1 ? windowSize / (windows.length - 1) : 0;
+  stepSize = windows.length > 1 ? stepSize / (windows.length - 1) : 0;
 
   // Update stats
   document.getElementById(
@@ -317,12 +577,10 @@ function updateVisualization() {
   document.getElementById("coverageInfo").textContent = `${coverage.toFixed(
     2
   )}%`;
-  document.getElementById(
-    "stepSizeInfo"
-  ).textContent = `${stepOrOverlap} images`;
-  document.getElementById(
-    "stepSizeCmInfo"
-  ).textContent = `${stepOrOverlapCm.toFixed(2)} cm`;
+  document.getElementById("stepSizeInfo").textContent = `${stepSize} images`;
+  document.getElementById("stepSizeCmInfo").textContent = `${stepSizeCm.toFixed(
+    2
+  )} cm`;
   document.getElementById(
     "seriesLengthInfo"
   ).textContent = `${seriesLength} images`;
@@ -351,9 +609,10 @@ function updateVisualization() {
     const row = document.createElement("div");
     const hue = ((i * 360) / windows.length) % 360;
     const color = `hsl(${hue}, 70%, 55%)`;
-    const left = (w.start / totalImages) * 100;
-    const width = ((w.end - w.start + 1) / totalImages) * 100;
-
+    const left = (w.window.start_idx / targets.totalImages) * 100;
+    const width =
+      ((w.window.end_img - w.window.start_img) / targets.totalImages) * 100;
+    const center_cm = w.window.center_mm / 10;
     row.className = "card white z-depth-1";
     row.style.padding = "0.75rem";
     row.style.marginBottom = "0.5rem";
@@ -368,10 +627,10 @@ function updateVisualization() {
                 </div>
               </div>
               <div class="window-info" style="min-width: 140px; text-align: right;">
-                <div style="font-weight: 500;">Images: ${w.start + 1} to ${
-      w.end + 1
-    }</div>
-                <div style="color: #666; font-size: 0.8rem;">Center: ${w.centercm.toFixed(
+                <div style="font-weight: 500;">Images: ${
+                  w.window.start_img
+                } to ${w.window.end_img}</div>
+                <div style="color: #666; font-size: 0.8rem;">Center: ${center_cm.toFixed(
                   2
                 )} cm</div>
               </div>
@@ -397,12 +656,16 @@ function updateVisualization() {
     const color1 = `hsla(${hue}, 70%, 65%)`;
     const color2 = `hsla(${hue}, 70%, 45%)`;
 
-    gradient.style.left = `${(w.start / totalImages) * 100}%`;
-    gradient.style.width = `${((w.end - w.start + 1) / totalImages) * 100}%`;
+    gradient.style.left = `${
+      (w.window.start_idx / targets.totalImages) * 100
+    }%`;
+    gradient.style.width = `${
+      ((w.window.end_img - w.window.start_img + 1) / targets.totalImages) * 100
+    }%`;
     gradient.style.background = `linear-gradient(to right, ${color1}, ${color2})`;
-    gradient.title = `Window ${i + 1}: ${w.start}-${
-      w.end
-    } (${w.centercm.toFixed(2)} cm center)`;
+    gradient.title = `Window ${i + 1}: ${w.window.start_img}-${
+      w.window.end_img
+    } (${(w.window.center_mm * 10).toFixed(2)} cm center)`;
 
     centerTimeline.appendChild(gradient);
   });
@@ -412,16 +675,16 @@ function updateVisualization() {
     const A = windows[i];
     const B = windows[i + 1];
 
-    if (A.end >= B.start) {
-      const overlapStart = B.start;
-      const overlapEnd = Math.min(A.end, B.end);
+    if (A.window.end_idx >= B.window.start_idx) {
+      const overlapStart = B.window.start_idx;
+      const overlapEnd = Math.min(A.window.end_idx, B.window.end_idx);
 
       if (overlapStart <= overlapEnd) {
         const overlap = document.createElement("div");
         overlap.className = "overlap-indicator";
-        overlap.style.left = `${(overlapStart / totalImages) * 100}%`;
+        overlap.style.left = `${(overlapStart / targets.totalImages) * 100}%`;
         overlap.style.width = `${
-          ((overlapEnd - overlapStart + 1) / totalImages) * 100
+          ((overlapEnd - overlapStart + 1) / targets.totalImages) * 100
         }%`;
         overlap.title = `Overlap between Window ${i + 1} and Window ${
           i + 2
@@ -435,9 +698,11 @@ function updateVisualization() {
   windows.forEach((w, i) => {
     const point = document.createElement("div");
     point.className = "center-point";
-    point.style.left = `${(w.center / totalImages) * 100}%`;
+    point.style.left = `${(w.window.center_idx / targets.totalImages) * 100}%`;
     point.style.background = `hsla(${(i * 360) / windows.length}, 70%, 50%)`;
-    point.title = `Window ${i + 1} center: ${w.centercm.toFixed(2)} cm`;
+    point.title = `Window ${i + 1} center: ${(w.window.center_mm * 10).toFixed(
+      2
+    )} cm`;
 
     point.addEventListener("mouseenter", () => {
       const g = centerTimeline.querySelector(`[data-window-index="${i}"]`);
@@ -450,51 +715,51 @@ function updateVisualization() {
 
     const label = document.createElement("div");
     label.className = "center-label";
-    label.textContent = `${w.centercm.toFixed(2)}cm`;
-    label.style.left = `${(w.center / totalImages) * 100}%`;
+    label.textContent = `${(w.window.center_mm * 10).toFixed(2)}cm`;
+    label.style.left = `${(w.window.center_idx / targets.totalImages) * 100}%`;
 
     centerTimeline.appendChild(point);
     centerTimeline.appendChild(label);
   });
 
   // Optimization info
-  let optimizationInfo = "";
-  if (!optimizationResult) {
-    optimizationInfo = `<p><strong>Nelder-Mead:</strong> <span class="orange-text">No optimization result available</span></p>`;
-  } else if (optimizationResult.error) {
-    optimizationInfo = `<p><strong>Nelder-Mead:</strong> <span class="orange-text">${optimizationResult.error}</span></p>`;
-  } else {
-    const statusIcon = optimizationResult.converged ? "✓" : "⚠";
-    const statusColor = optimizationResult.converged
-      ? "green-text"
-      : "orange-text";
-    optimizationInfo = `<p><strong>Nelder-Mead:</strong> Score ${optimizationResult.optimizationScore.toFixed(
-      4
-    )} <span class="${statusColor}">${statusIcon}</span></p>`;
-  }
+  //   let optimizationInfo = "";
+  //   if (!optimizationResult) {
+  //     optimizationInfo = `<p><strong>Nelder-Mead:</strong> <span class="orange-text">No optimization result available</span></p>`;
+  //   } else if (optimizationResult.error) {
+  //     optimizationInfo = `<p><strong>Nelder-Mead:</strong> <span class="orange-text">${optimizationResult.error}</span></p>`;
+  //   } else {
+  //     const statusIcon = optimizationResult.converged ? "✓" : "⚠";
+  //     const statusColor = optimizationResult.converged
+  //       ? "green-text"
+  //       : "orange-text";
+  //     optimizationInfo = `<p><strong>Nelder-Mead:</strong> Score ${optimizationResult.optimizationScore.toFixed(
+  //       4
+  //     )} <span class="${statusColor}">${statusIcon}</span></p>`;
+  //   }
 
-  document.getElementById("centerDetails").innerHTML = `
-          <h6 class="blue-text text-darken-2"><i class="material-icons left small">info</i>Details</h6>
-          <p><strong>Center Points:</strong> 
-            ${centerPoints
-              .map(
-                (p, i) =>
-                  `<span class="chip" style="background: hsla(${
-                    (i * 360) / centerPoints.length
-                  }, 70%, 85%)">${p.toFixed(2)}cm</span>`
-              )
-              .join("")}
-          </p>
-          <p><strong>Average Distance:</strong> ${
-            windows.length > 1
-              ? (
-                  (windows[windows.length - 1].centercm - windows[0].centercm) /
-                  (windows.length - 1)
-                ).toFixed(2) + " cm"
-              : "N/A"
-          }</p>
-          ${optimizationInfo}
-        `;
+  //   document.getElementById("centerDetails").innerHTML = `
+  //           <h6 class="blue-text text-darken-2"><i class="material-icons left small">info</i>Details</h6>
+  //           <p><strong>Center Points:</strong>
+  //             ${centerPoints
+  //               .map(
+  //                 (p, i) =>
+  //                   `<span class="chip" style="background: hsla(${
+  //                     (i * 360) / centerPoints.length
+  //                   }, 70%, 85%)">${p.toFixed(2)}cm</span>`
+  //               )
+  //               .join("")}
+  //           </p>
+  //           <p><strong>Average Distance:</strong> ${
+  //             windows.length > 1
+  //               ? (
+  //                   (windows[windows.length - 1].centercm - windows[0].centercm) /
+  //                   (windows.length - 1)
+  //                 ).toFixed(2) + " cm"
+  //               : "N/A"
+  //           }</p>
+  //           ${optimizationInfo}
+  //         `;
 }
 
 // Event listeners
@@ -505,59 +770,26 @@ document
   .getElementById("totalLength")
   .addEventListener("input", updateVisualization);
 document
-  .getElementById("targetWindowNumber")
+  .getElementById("sliceThickness")
   .addEventListener("input", updateVisualization);
 document
   .getElementById("targetWindowLength")
   .addEventListener("input", updateVisualization);
 document
-  .getElementById("targetStepOrOverlap")
+  .getElementById("targetStepSize")
   .addEventListener("input", updateVisualization);
 document
   .getElementById("targetPercentage")
   .addEventListener("input", updateVisualization);
 document
-  .getElementById("targetWindowNumberWeight")
-  .addEventListener("input", updateVisualization);
-document
   .getElementById("targetWindowLengthWeight")
   .addEventListener("input", updateVisualization);
 document
-  .getElementById("targetStepOrOverlapWeight")
+  .getElementById("targetStepSizeWeight")
   .addEventListener("input", updateVisualization);
 document
   .getElementById("targetPercentageWeight")
   .addEventListener("input", updateVisualization);
-
-document.getElementById("targetType").addEventListener("change", (e) => {
-  const selectedValue = e.target.value; // "stepSize" | "overlap"
-  mode = selectedValue;
-
-  const windowLength = parseFloat(
-    document.getElementById("targetWindowLength").value
-  );
-  const field = document.getElementById("targetStepOrOverlap");
-
-  if (selectedValue === "stepSize") {
-    // value is currently % -> convert to cm
-    const oldOverlapPercent = parseFloat(field.value);
-    const stepSizeCm = windowLength - (oldOverlapPercent / 100) * windowLength;
-    field.min = "0.01";
-    field.max = "50";
-    field.step = "0.01";
-    field.value = stepSizeCm.toFixed(3);
-  } else {
-    // value is currently cm -> convert to %
-    const oldStepCm = parseFloat(field.value);
-    const overlapPercent = (1 - oldStepCm / windowLength) * 100;
-    field.min = "0";
-    field.max = "100";
-    field.step = "0.1";
-    field.value = overlapPercent.toFixed(1);
-  }
-
-  updateVisualization();
-});
 
 // Initialize MaterializeCSS components
 document.addEventListener("DOMContentLoaded", function () {
